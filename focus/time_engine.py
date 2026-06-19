@@ -37,10 +37,29 @@ class VirtualTimeEngine:
         return min(1.0, max(0.0, virtual_seconds / planned_seconds))
 
     @staticmethod
+    def compute_real_elapsed_seconds(session, now_real=None):
+        if now_real is None:
+            now_real = time.time()
+        speed_rate = session.speed_rate or 10.0
+        base_real = (session.accumulated_virtual_seconds or 0.0) / speed_rate
+        if session.status == "completed":
+            return base_real
+        if session.status == "paused":
+            return base_real
+        effective_start = (
+            session.last_pause_real_timestamp
+            if session.last_pause_real_timestamp is not None
+            else session.start_real_timestamp
+        )
+        delta_real = max(0.0, now_real - effective_start)
+        return base_real + delta_real
+
+    @staticmethod
     def build_state_payload(session, now_real=None):
         if now_real is None:
             now_real = time.time()
         virtual_seconds = VirtualTimeEngine.compute_current_virtual_seconds(session, now_real)
+        real_elapsed = VirtualTimeEngine.compute_real_elapsed_seconds(session, now_real)
         progress = VirtualTimeEngine.compute_progress(
             virtual_seconds, session.total_planned_virtual_seconds
         )
@@ -51,6 +70,7 @@ class VirtualTimeEngine:
             "status": session.status,
             "speed_rate": session.speed_rate,
             "virtual_seconds": round(virtual_seconds, 3),
+            "real_elapsed_seconds": round(real_elapsed, 3),
             "total_planned_virtual_seconds": session.total_planned_virtual_seconds,
             "accumulated_virtual_seconds": round(session.accumulated_virtual_seconds, 3),
             "progress": round(progress, 6),

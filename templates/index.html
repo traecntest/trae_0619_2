@@ -201,6 +201,75 @@
     font-size: 15px;
     color: var(--text);
   }
+  .compare-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 22px;
+    padding: 14px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+  }
+  .compare-card {
+    flex: 1;
+    text-align: center;
+    padding: 12px 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    transition: all 0.2s;
+  }
+  .compare-card.virtual {
+    background: linear-gradient(135deg, rgba(94,234,212,0.1), rgba(129,140,248,0.1));
+    border: 1px solid rgba(94,234,212,0.25);
+  }
+  .compare-card.real {
+    background: rgba(148,163,184,0.08);
+    border: 1px solid rgba(148,163,184,0.2);
+  }
+  .compare-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.3px;
+  }
+  .compare-time {
+    font-size: 20px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    letter-spacing: 1px;
+  }
+  .compare-card.virtual .compare-time {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .compare-card.real .compare-time {
+    color: #cbd5e1;
+  }
+  .compare-tag {
+    margin-top: 6px;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    background: rgba(94,234,212,0.15);
+    color: var(--accent);
+  }
+  .compare-tag.real-tag {
+    background: rgba(148,163,184,0.15);
+    color: var(--muted);
+  }
+  .compare-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--muted);
+    font-size: 20px;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
@@ -268,6 +337,21 @@
             </div>
           </div>
         </div>
+
+        <div class="compare-wrap">
+          <div class="compare-card virtual">
+            <div class="compare-label">虚拟流逝时间</div>
+            <div class="compare-time" id="virtualTimeSmall">00:00:00</div>
+            <div class="compare-tag" id="virtualTag">x10 倍速</div>
+          </div>
+          <div class="compare-arrow">→</div>
+          <div class="compare-card real">
+            <div class="compare-label">真实流逝时间 (1:1)</div>
+            <div class="compare-time" id="realTimeSmall">00:00:00</div>
+            <div class="compare-tag real-tag">无加速对比</div>
+          </div>
+        </div>
+
         <div class="controls">
           <button id="pauseBtn" class="secondary">暂停</button>
           <button id="finishBtn" class="danger">结束</button>
@@ -465,6 +549,7 @@
     $("sessionView").classList.remove("hidden");
     $("sessionTitleDisplay").textContent = sess.title || "专注会话";
     $("speedLabel").textContent = "x" + sess.speed_rate + " 倍速";
+    $("virtualTag").textContent = "x" + sess.speed_rate + " 倍速";
     const badge = $("statusBadge");
     badge.className = "badge " + sess.status;
     badge.textContent = sess.status === "running" ? "进行中" : sess.status === "paused" ? "已暂停" : "已完成";
@@ -545,6 +630,22 @@
     return Math.min(base + deltaVirtual, s.total_planned_virtual_seconds);
   }
 
+  function computeLocalRealSeconds() {
+    if (!state.session) return 0;
+    const s = state.session;
+    const baseVirtual = s.accumulated_virtual_seconds || 0;
+    const baseReal = baseVirtual / (s.speed_rate || 10);
+    if (s.status === "completed") {
+      return baseReal;
+    }
+    if (s.status === "paused") {
+      return baseReal;
+    }
+    const startReal = s.last_pause_real_timestamp || s.start_real_timestamp || (Date.now() / 1000);
+    const deltaReal = Math.max(0, Date.now() / 1000 - startReal);
+    return baseReal + deltaReal;
+  }
+
   function startLoop() {
     if (state.animFrame) return;
     let last = performance.now();
@@ -563,6 +664,10 @@
         $("bigTime").textContent = formatHMS(state.displayVirtualSeconds);
         $("progressLabel").textContent = Math.round(state.displayProgress * 100) + "%";
         drawProgress(state.displayProgress);
+
+        const realSeconds = computeLocalRealSeconds();
+        $("virtualTimeSmall").textContent = formatHMS(state.displayVirtualSeconds);
+        $("realTimeSmall").textContent = formatHMS(realSeconds);
 
         if (!state.isPaused && s.status === "running") {
           if (Date.now() - state.lastPollAt > 5000) {
